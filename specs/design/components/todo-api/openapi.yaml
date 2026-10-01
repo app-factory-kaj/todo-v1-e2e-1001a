@@ -1,0 +1,141 @@
+openapi: 3.0.3
+info:
+  title: Todo API
+  version: 0.1.0
+  description: Create, list, update, complete, and delete todos on the shared in-memory list.
+servers:
+  - url: /
+paths:
+  /todos:
+    get:
+      operationId: listTodos
+      summary: List every todo on the shared list
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: completed
+          in: query
+          description: Filter by completion state
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: A page of todos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, data]
+                properties:
+                  count: { type: integer, description: total matching todos }
+                  next: { type: string, nullable: true, description: relative URI of the next page }
+                  previous: { type: string, nullable: true, description: relative URI of the previous page }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Todo' }
+    post:
+      operationId: createTodo
+      summary: Create a new todo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewTodo' }
+      responses:
+        '201':
+          description: The created todo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Todo' }
+        '400':
+          description: The title is missing or blank
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /todos/{todoId}:
+    parameters:
+      - name: todoId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getTodo
+      summary: Get one todo
+      responses:
+        '200':
+          description: The todo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Todo' }
+        '404':
+          description: No todo with this id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    patch:
+      operationId: updateTodo
+      summary: Update a todo's title and/or completed state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TodoUpdate' }
+      responses:
+        '200':
+          description: The updated todo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Todo' }
+        '400':
+          description: The title is blank
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: No todo with this id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      operationId: deleteTodo
+      summary: Delete a todo
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: No todo with this id
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+components:
+  schemas:
+    Todo:
+      type: object
+      required: [id, title, completed, createdAt]
+      properties:
+        id: { type: string, description: server-generated identifier }
+        title: { type: string }
+        completed: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    NewTodo:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1 }
+    TodoUpdate:
+      type: object
+      description: Any subset of a todo's mutable fields.
+      properties:
+        title: { type: string, minLength: 1 }
+        completed: { type: boolean }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: integer, description: HTTP or application error code }
+        message: { type: string, description: short human-readable label }
+        description: { type: string, description: detailed explanation }
+        moreInfo: { type: string, description: URI to documentation }
