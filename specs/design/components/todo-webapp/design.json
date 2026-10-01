@@ -7,10 +7,34 @@
   "appPath": "todo-webapp",
   "entrypoint": "deployment/web-application",
   "exposure": "internet",
-  "dependencies": [
-    { "kind": "component", "name": "todo-api" }
+  "stories": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
   ],
   "description": "Single-page web app that lets anyone open the shared todo list and create, view, edit, complete, reopen, and delete todos by calling todo-api directly from the browser. It has no sign-in and holds no state of its own beyond what todo-api returns.",
-  "stories": [1, 2, 3, 4, 5, 6],
-  "skillsPinned": ["wireframes", "react-webapp", "oxygen-ui-design-system"]
+  "dependencies": [
+    {
+      "kind": "component",
+      "name": "todo-api",
+      "wiring": {
+        "endpoint": {
+          "component": "todo-v1-e2e-1001a-todo-api",
+          "name": "http",
+          "visibility": "project",
+          "envBindings": {
+            "address": "TODO_API_URL"
+          }
+        }
+      }
+    }
+  ],
+  "skillsPinned": [
+    "wireframes",
+    "react-webapp",
+    "oxygen-ui-design-system"
+  ]
 }
