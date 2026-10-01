@@ -7,18 +7,20 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+
+# The platform runs this pod under an arbitrary, non-root UID with a
+# read-only root filesystem, so nothing under /etc or /var can be written at
+# container start -- a prior fix that merely chmod'd these paths still failed
+# for exactly that reason (permission bits don't matter against a read-only
+# mount). These two files stay static and read-only in the image;
+# 15-aep-api-proxy.sh resolves the sibling address and the cluster DNS
+# resolver, then writes the actual running config fresh under /tmp -- the one
+# path guaranteed writable under any UID and under a read-only root
+# filesystem alike. CMD below points nginx at that generated config.
+COPY nginx/nginx.conf /etc/nginx/aep/nginx.conf
+COPY nginx/default.conf /etc/nginx/aep/default.conf.tmpl
 COPY nginx/15-aep-api-proxy.sh /docker-entrypoint.d/15-aep-api-proxy.sh
-# The entrypoint script rewrites default.conf in place at container start (it
-# substitutes the resolved sibling address into it). A plain COPY leaves that
-# file root-owned with no group write, so the rewrite silently fails whenever
-# the platform runs this pod as a non-root UID — the drop-in script exits
-# non-zero, and the stock nginx entrypoint (itself `set -e`) aborts before
-# nginx ever starts. There is no way to know in advance which UID/GID the
-# platform will run the pod as, so these are opened to any caller rather than
-# a specific group — they are internal-only paths inside this single-purpose
-# container, and this keeps working when run as root too.
 RUN chmod +x /docker-entrypoint.d/15-aep-api-proxy.sh && \
-    chmod -R a+rwX /etc/nginx/conf.d /var/cache/nginx /var/run
+    rm -f /etc/nginx/conf.d/default.conf
 EXPOSE 9090
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["nginx", "-c", "/tmp/nginx-runtime/nginx.conf", "-g", "daemon off;"]
