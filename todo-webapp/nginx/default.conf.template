@@ -1,9 +1,10 @@
-# Rendered by run.sh and piped straight into `nginx -c /dev/stdin` -- never
-# written to disk. The pod's root filesystem may be read-only and its UID is
-# not knowable in advance, so nothing below may depend on write access
-# anywhere on disk, /tmp included: pid goes to /dev/null, logs to the
-# standard streams, and every proxy/body temp-file path is replaced with
-# memory-only buffering sized for this app's small JSON payloads.
+# Rendered by run.sh into a real file under /dev/shm (its own tmpfs mount,
+# writable independent of the root filesystem) and loaded with `nginx -c`.
+# The pod's root filesystem may still be read-only and its UID is not
+# knowable in advance, so nothing below may depend on write access to the
+# root filesystem itself: pid goes to /dev/null, logs to the standard
+# streams, and every proxy/body temp-file path is replaced with memory-only
+# buffering sized for this app's small JSON payloads.
 pid /dev/null;
 worker_processes auto;
 
