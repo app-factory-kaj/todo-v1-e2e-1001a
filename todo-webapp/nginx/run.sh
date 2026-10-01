@@ -16,13 +16,21 @@
 # under the License.
 
 # This is the container's CMD, run by the stock nginx:alpine entrypoint after
-# its own /docker-entrypoint.d/*.sh scripts. Two prior fixes rewrote a config
-# file in place -- first at /etc/nginx/conf.d (chmod'd writable for any UID),
-# then entirely under /tmp -- and the pod still redeployed ResourcesDegraded
-# on both, which rules out write-permission and read-only-root-fs theories:
-# whatever is wrong survives both. So this build resolves the sibling address
-# exactly as before, but never writes the rendered config anywhere on disk --
-# it pipes straight into nginx's stdin instead.
+# its own /docker-entrypoint.d/*.sh scripts. Two earlier fixes rewrote a
+# config file in place -- first at /etc/nginx/conf.d (chmod'd writable for
+# any UID), then entirely under /tmp -- and the pod still redeployed
+# ResourcesDegraded on both, so a third fix removed every runtime disk write
+# by piping the rendered config straight into `nginx -c /dev/stdin`.
+#
+# That pipe is its own bug, independent of permissions: nginx sizes its
+# config read off fstat(), which reports size 0 for a pipe, so it treats the
+# config as empty and exits immediately at startup -- a container that never
+# comes up, which is consistent with ResourcesDegraded never clearing.
+#
+# This renders into a real file on /dev/shm instead. /dev/shm is its own
+# tmpfs mount, separate from the root filesystem, so it stays writable even
+# when the root filesystem is read-only and /tmp is not -- and because it is
+# a real file, nginx reads it the normal way.
 
 set -e
 
@@ -69,12 +77,10 @@ echo "aep-run: /api -> ${API_BACKEND}${API_CONTEXT}  [${API_LANE}]"
 
 export DNS_RESOLVERS API_BACKEND API_CONTEXT
 
-# Background the whole pipe so `wait` tracks nginx (the last stage, $!) as a
-# real foreground job: a signal sent to this script's own PID 1 is forwarded
-# to nginx explicitly below, rather than relying on shell-specific pipeline
-# exec optimizations that may or may not hand nginx PID 1 itself.
-envsubst '$DNS_RESOLVERS $API_BACKEND $API_CONTEXT' < /etc/nginx/aep/default.conf.template \
-    | nginx -c /dev/stdin -g 'daemon off;' &
-NGINX_PID=$!
-trap 'kill -TERM "$NGINX_PID" 2>/dev/null' TERM INT
-wait "$NGINX_PID"
+CONF=/dev/shm/aep-nginx.conf
+envsubst '$DNS_RESOLVERS $API_BACKEND $API_CONTEXT' < /etc/nginx/aep/default.conf.template > "$CONF"
+
+# exec replaces this script with nginx, so nginx runs as PID 1 and receives
+# container signals (TERM, QUIT) directly -- no backgrounding or signal
+# forwarding needed now that the pipe is gone.
+exec nginx -c "$CONF" -g 'daemon off;'
