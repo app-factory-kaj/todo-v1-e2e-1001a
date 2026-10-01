@@ -7,16 +7,20 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# The config is rendered at container start (nginx/run.sh) onto /dev/shm --
-# its own tmpfs mount, writable independent of the root filesystem -- and
-# loaded with `nginx -c`. Earlier fixes wrote a rendered config in place
-# under /etc/nginx/conf.d, then under /tmp, then piped it into nginx's stdin;
-# all three still redeployed ResourcesDegraded (the stdin pipe for an
-# unrelated reason: nginx sizes its config read from fstat(), which reports 0
-# for a pipe). The stock conf.d/default.conf is unused and removed.
-COPY nginx/default.conf.template /etc/nginx/aep/default.conf.template
-COPY nginx/run.sh /usr/local/bin/aep-run.sh
-RUN chmod +x /usr/local/bin/aep-run.sh && rm -f /etc/nginx/conf.d/default.conf
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY nginx/15-aep-api-proxy.sh /docker-entrypoint.d/15-aep-api-proxy.sh
+RUN chmod +x /docker-entrypoint.d/15-aep-api-proxy.sh
 EXPOSE 9090
-CMD ["/usr/local/bin/aep-run.sh"]
+
+# Five earlier fixes (writable conf.d, /tmp, reverting to this very asset,
+# piping into nginx's stdin, rendering onto /dev/shm) each changed HOW the
+# config reaches disk and every one of them still redeployed
+# ResourcesDegraded -- including the plain, unmodified version of this asset.
+# The one thing none of them touched is `worker_processes auto;`, which the
+# base image's own nginx.conf sets: in a container capped to a small memory
+# limit but scheduled on a node with many cores, `auto` forks one worker per
+# HOST core and can OOM the process before it ever binds :9090 -- a crash
+# indistinguishable from every other "container exits at startup" failure,
+# and one that would persist unchanged across all five attempts above.
+# Capped here, with no file to template and nothing to write at runtime.
+CMD ["nginx", "-g", "daemon off; worker_processes 1;"]
