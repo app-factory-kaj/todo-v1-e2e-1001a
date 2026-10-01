@@ -16,11 +16,28 @@
 # under the License.
 
 # Runs from official nginx:alpine /docker-entrypoint.d/ *before* nginx starts.
-# Do not exec nginx here; the image ENTRYPOINT does that.
+# Do not exec nginx here; the image ENTRYPOINT does that (CMD points nginx at
+# the config this script assembles below).
+#
+# The image filesystem is read-only at runtime and the pod's UID is not known
+# in advance, so nothing is rewritten in place under /etc or /var here. Every
+# runtime-resolved file is written fresh under /tmp, which stays writable
+# under any UID and under a read-only root filesystem alike.
 
 set -e
 
-CONF=/etc/nginx/conf.d/default.conf
+RUNTIME_DIR=/tmp/nginx-runtime
+mkdir -p "$RUNTIME_DIR/conf.d" \
+         "$RUNTIME_DIR/cache/client_temp" \
+         "$RUNTIME_DIR/cache/proxy_temp" \
+         "$RUNTIME_DIR/cache/fastcgi_temp" \
+         "$RUNTIME_DIR/cache/uwsgi_temp" \
+         "$RUNTIME_DIR/cache/scgi_temp"
+
+cp /etc/nginx/aep/nginx.conf "$RUNTIME_DIR/nginx.conf"
+
+CONF="$RUNTIME_DIR/conf.d/default.conf"
+cp /etc/nginx/aep/default.conf.tmpl "$CONF"
 
 DNS_RESOLVERS="$(awk '/^nameserver/ {print $2}' /etc/resolv.conf | tr '\n' ' ' | sed 's/ $//')"
 if [ -z "$DNS_RESOLVERS" ]; then
