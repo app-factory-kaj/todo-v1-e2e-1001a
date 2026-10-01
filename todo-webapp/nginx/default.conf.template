@@ -1,0 +1,94 @@
+# Rendered by run.sh and piped straight into `nginx -c /dev/stdin` -- never
+# written to disk. The pod's root filesystem may be read-only and its UID is
+# not knowable in advance, so nothing below may depend on write access
+# anywhere on disk, /tmp included: pid goes to /dev/null, logs to the
+# standard streams, and every proxy/body temp-file path is replaced with
+# memory-only buffering sized for this app's small JSON payloads.
+pid /dev/null;
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    access_log /dev/stdout;
+    error_log  /dev/stderr notice;
+
+    sendfile on;
+    keepalive_timeout 65;
+
+    client_body_in_file_only off;
+    client_body_buffer_size 1m;
+    proxy_max_temp_file_size 0;
+    proxy_buffers 16 64k;
+    proxy_buffer_size 64k;
+
+    # Request-time DNS so nginx starts if the sibling API Service is not up yet
+    # (browser /api then 502s; the pod does not crash-loop).
+    resolver ${DNS_RESOLVERS} valid=10s ipv6=off;
+
+    server {
+        listen 9090;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        location /api/ {
+            set $api_backend ${API_BACKEND};
+
+            # The context prefix MUST survive the rewrite. When /api is proxied to
+            # the API gateway, the gateway routes on that prefix and dropping it
+            # 404s every call. Empty for a direct-Service backend, which reduces
+            # this to the plain `/$1` strip.
+            rewrite ^/api/(.*) ${API_CONTEXT}/$1 break;
+
+            proxy_pass http://$api_backend;
+            proxy_http_version 1.1;
+            proxy_set_header Host $api_backend;
+            proxy_set_header Connection "";
+
+            # Identity is the gateway's to assert, never the browser's. Clearing
+            # these means a client cannot pre-set an identity header and have the
+            # backend — which is required to trust them — believe it. Setting a
+            # proxy header to "" drops it from the upstream request.
+            #
+            # x-jwt-assertion is the one the service actually believes: it is the
+            # gateway-signed statement of who the caller is. A browser cannot forge
+            # one (it is signed with a key only the gateway holds) but it can
+            # REPLAY one it was somehow handed, and on a PUBLIC operation the
+            # gateway overwrites nothing. Clearing it here means the only assertion
+            # that reaches the service is the one the gateway minted for this
+            # request.
+            proxy_set_header x-jwt-assertion "";
+
+            # The X-User-* headers are unsigned, and no generated service reads
+            # them any more. They are still cleared, because this proxy is a lane
+            # into the service that the API gateway does not sit on and nothing
+            # should be able to put an identity on it.
+            proxy_set_header X-User-Id "";
+            proxy_set_header X-User-Name "";
+            proxy_set_header X-User-Groups "";
+            proxy_set_header X-User-Ou "";
+            proxy_set_header X-User-Scopes "";
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_connect_timeout 10s;
+            proxy_read_timeout 60s;
+            proxy_send_timeout 60s;
+
+            # A chat turn to an agent can carry files: 15 MiB of them is 20 MiB
+            # base64, plus framing. nginx's 1 MiB default would 413 a single photo.
+            client_max_body_size 24m;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}
