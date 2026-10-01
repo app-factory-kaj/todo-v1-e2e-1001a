@@ -1,0 +1,4 @@
+apiVersion = "agentic-engineer/v1"
+name = "todo-v1-e2e-1001a"
+createdAt = "2026-10-01T09:05:52Z"
+idea = "A simple todo app: a REST API service (create, list, update, complete, delete todos) with an in-memory store, and a single-page web app that calls that API. No sign-in or authentication of any kind, no database, no platform resources; keep the data in memory."
