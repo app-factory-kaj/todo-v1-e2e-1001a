@@ -25,29 +25,28 @@ shared list of todos.
 ## User Stories
 
 1. As a User, I want to create a new todo with a title, so that I can
- capture something I need to do.
+capture something I need to do.
 2. As a User, I want to view the list of all todos, so that I can see
- everything that's outstanding and done.
-3. As a User, I want to update a todo's details, so that I can correct or
- refine it after creating it.
+everything that's outstanding and done.
+3. As a User, I want to update a todo's title, so that I can correct or
+refine it after creating it.
 4. As a User, I want to mark a todo as complete, so that I can track my
- progress.
+progress.
 5. As a User, I want to mark a completed todo back as incomplete, so that I
- can reopen something I checked off by mistake or need to redo.
+can reopen something I checked off by mistake or need to redo.
 6. As a User, I want to delete a todo, so that I can remove items I no
- longer need to track.
+longer need to track.
 
 ## Product Decisions
 
 - **Sign-in:** none. The product has no authentication of any kind — every
 visitor uses the same shared list.
 - **Scope of the list:** a single shared todo list, not scoped per visitor
-or per session, since there are no accounts to scope by. *assumed*
+or per session, since there are no accounts to scope by.
 - **Storage:** todos are held in the API service's memory only; nothing
 persists across a restart, and there is no database or other platform
 resource.
-- **Todo fields:** a title (required) and an optional description.
-*assumed*
+- **Todo fields:** a title only — no description or other fields.
 - **External services:** none — the product integrates with no third-party
 service.
 
